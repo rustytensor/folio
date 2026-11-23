@@ -1,0 +1,6 @@
+# Result of bin/test on main at eba4276722f20c33b12ddce4f58c673f7011b645, recorded 2026-11-23.
+passed=278
+failed=0
+skipped=1
+failing=
+english=PASS
