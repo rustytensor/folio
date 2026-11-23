@@ -10,10 +10,10 @@
 #                       drawn without a layer; with good/lines-menu.qml and
 #                       good/lines-keys.qml planted into PathBar.qml and
 #                       FolderPane.qml, gates 4 to 9, 12 to 14, 16, 20 to 22
-#                       and 25 to 28 must pass
+#                       and 25 to 30 must pass
 #   bad/TreeLines.qml   wrong on purpose; gates 4, 5, 20, 21, 22 and 25 to
-#                       28 must fail
-#   main's QML as is    no lines at all; gates 4 to 17, 20 to 22 and 25 to 28
+#                       30 must fail
+#   main's QML as is    no lines at all; gates 4 to 17, 20 to 22 and 25 to 30
 #                       must fail cleanly
 #   gates 2, 3, 18, 24  their checks on made-up inputs: a second QML file,
 #                       a pragma ComponentBehavior, a test file change that
@@ -231,6 +231,10 @@ expect_scaled PASS good
 expect_scaled FAIL bad
 expect PASS good 28 28
 expect FAIL bad 28 28
+expect PASS good 29 29
+expect FAIL bad 29 29
+expect PASS good 30 30
+expect FAIL bad 30 30
 
 expect_check PASS 2 tests-none "$(check_tests '')"
 expect_check PASS 2 tests-one "$(check_tests "$outline_test")"
@@ -245,6 +249,8 @@ expect_check FAIL 3 state-route "$(gate_only_file route '    readonly property v
 expect_check FAIL 3 state-dots "$(gate_only_file dots '    readonly property var dots: built.dots.concat(built.routeDots)' '')"
 expect_check FAIL 3 state-built-dots "$(gate_only_file built-dots '' '        property var dots: []')"
 expect_check FAIL 3 state-route-dots "$(gate_only_file route-dots '' '        property var routeDots: []')"
+expect_check FAIL 3 state-open "$(gate_only_file open '' '        property bool open: true')"
+expect_check FAIL 3 state-open-used "$(gate_only_file open-used '    function walk() { if (built.open) read() }' '')"
 expect_check PASS 19 overlay-row "$(overlay_row right '            [qsTr("Next or previous line style"), [["L"], ["Shift", "L"]]],')"
 expect_check FAIL 19 overlay-none "$(overlay_row none '')"
 expect_check FAIL 19 overlay-l-only "$(overlay_row l-only '            [qsTr("Next line style"), [["L"]]],')"
@@ -254,7 +260,8 @@ expect_check FAIL 18 suite-no-outline "$(suite_check "$suite_base" "$(suite_resu
 expect_check FAIL 18 suite-plus-two "$(suite_check "$suite_base" "$(suite_result 280 folderModelGivesItsOutline,outlineIsEmpty)")"
 
 expect_check PASS 2 one-qml "$(extra_qml_files 'src/TreeLines.qml')"
-expect_check FAIL 2 two-qml "$(extra_qml_files $'src/TreeLines.qml\nsrc/LinesMenu.qml')"
+expect_check PASS 2 lines-menu-qml "$(extra_qml_files $'src/TreeLines.qml\nsrc/LinesMenu.qml')"
+expect_check FAIL 2 two-qml "$(extra_qml_files $'src/TreeLines.qml\nsrc/LinesMenu.qml\nsrc/LinesButton.qml')"
 expect_check PASS 3 no-pragma "$(adds_pragma 'import QtQuick' && echo 'pragma ComponentBehavior added')"
 expect_check FAIL 3 pragma "$(adds_pragma $'pragma ComponentBehavior: Bound\nimport QtQuick' && echo 'pragma ComponentBehavior added')"
 expect_check PASS 24 settings-right "$(settings_variant right)"
@@ -275,6 +282,8 @@ expect FAIL main-counting 25 25
 expect FAIL main 26 26
 expect_scaled FAIL main
 expect FAIL main 28 28
+expect FAIL main 29 29
+expect FAIL main 30 30
 expect FAIL main 17-shots shots "$work/main-shots"
 
 ((wrong == 0))

@@ -1,6 +1,7 @@
-# Result of bin/test on main at eba4276722f20c33b12ddce4f58c673f7011b645 (exit status 0), recorded 2026-11-23T03:06Z.
-passed=278
+# Result of bin/test on main at bd8ea0cddb18b61268706518001b1813d0446479 (exit status 0), recorded 2026-11-23T17:37Z by the pane gates' record-baseline.sh on an export of main (the same suite at the same commit), reused here.
+passed=289
 failed=0
 skipped=1
 failing=
 english=PASS
+outline=

@@ -28,6 +28,19 @@ SOURCES += $$PWD/tree_gates.cpp $$FOLIO_SOURCES
 HEADERS += $$files($$FOLIO_REPO/src/*.h)
 RESOURCES += $$FOLIO_REPO/src/resources.qrc
 
+# Folio's CMake build puts src/*.qml and src/*.js into the QML module FolioUI
+# (qrc:/FolioUI/Main.qml), precompiled into a resource Windows loads with
+# Q_INIT_RESOURCE(qmlcache_folio_core). The driver packs the same files
+# under the same paths into a resource of that name, uncompiled: rcc names
+# the resource after the .qrc file, so Folio's own code finds it.
+FOLIO_QML = $$files($$FOLIO_REPO/src/*.qml) $$files($$FOLIO_REPO/src/*.js)
+FOLIO_QML_QRC = $$OUT_PWD/qmlcache_folio_core.qrc
+FOLIO_QML_LINES = "<RCC>" "    <qresource prefix=\"/FolioUI\">"
+for(file, FOLIO_QML): FOLIO_QML_LINES += "        <file alias=\"$$basename(file)\">$$file</file>"
+FOLIO_QML_LINES += "    </qresource>" "</RCC>"
+write_file($$FOLIO_QML_QRC, FOLIO_QML_LINES)|error("Could not write $$FOLIO_QML_QRC.")
+RESOURCES += $$FOLIO_QML_QRC
+
 # Folio's CMake build defines where an installed Folio finds its plugins.
 # The driver names its own (empty) plugin folder, so this is never read.
 DEFINES += FOLIO_PACKAGED_PLUGINS=\\\"/usr/share/folio/plugins\\\"

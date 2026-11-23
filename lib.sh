@@ -12,6 +12,7 @@ build_dir="$repo/build/gates"
 driver="$build_dir/tree-gates"
 log_dir="$gates_dir/logs"
 # Main's src/, exported with git archive (the checkout is never touched).
+# The driver loads it, like any QML folder, in place of qrc:/FolioUI/.
 main_src="$build_dir/main-src"
 # The driver finds fixture.sh through this.
 export FOLIO_GATES_DIR="$gates_dir"
@@ -75,9 +76,10 @@ make_counting_copy() {
 }
 
 # Gate 2's check on the files the change adds (one per line): prints the
-# QML files among them other than src/TreeLines.qml, comma-separated.
+# QML files among them other than src/TreeLines.qml and src/LinesMenu.qml
+# (revision 8: the lines menu may live in a file of its own), comma-separated.
 extra_qml_files() {
-    grep -E '\.qml$' <<<"$1" | grep -vx 'src/TreeLines.qml' | sort -u | paste -sd, - || true
+    grep -E '\.qml$' <<<"$1" | grep -vxE 'src/(TreeLines|LinesMenu)\.qml' | sort -u | paste -sd, - || true
 }
 
 # Gate 2's check on `git diff main -U0 -- tests/folio_tests.cpp` (revision
@@ -196,8 +198,10 @@ has_lines_keys_row() {
 # Gate 3's check on src/TreeLines.qml (revision 7): no state kept only for
 # the gates. Outside comments, the root item declares no property named
 # guides, dots or route; the object with `id: built` declares no dots or
-# routeDots; and nothing refers to built.dots or built.routeDots. Prints one
-# problem per line; nothing when the file passes (or is missing).
+# routeDots; and nothing refers to built.dots or built.routeDots. Revision 9
+# adds that built declares no open and nothing refers to built.open (no
+# "a folder may be open" shortcut). Prints one problem per line; nothing
+# when the file passes (or is missing).
 gate_only_check() {
     python3 -I - "$1" <<'PY'
 import re
@@ -232,9 +236,9 @@ for i, line in enumerate(lines):
     name = match.group(1)
     if blocks[i] == 0 and name in ("guides", "dots", "route"):
         problems.append(f"TreeLines declares a {name} property on its root item")
-    if blocks[i] in built and name in ("dots", "routeDots"):
+    if blocks[i] in built and name in ("dots", "routeDots", "open"):
         problems.append(f"built declares {name}")
-for name in sorted(set(re.findall(r"\bbuilt\.(dots|routeDots)\b", text))):
+for name in sorted(set(re.findall(r"\bbuilt\.(dots|routeDots|open)\b", text))):
     problems.append(f"TreeLines uses built.{name}")
 print("\n".join(problems))
 PY

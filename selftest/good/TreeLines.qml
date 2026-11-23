@@ -1,20 +1,20 @@
 import QtQuick
 import QtQuick.Shapes
 
-// Self-test stand-in for src/TreeLines.qml (contract revision 6): it
+// Self-test stand-in for src/TreeLines.qml (contract revision 9): it
 // computes the numbers the contract asks for, straight from its formulas,
 // and draws the guides and curves (no dots, no trace route) in one Shape
 // with one ShapePath per colour and the style's opacity on the Shape, with
 // no layer, so they draw at any display scale. Loaded by selftest/run.sh to
 // show that the gates pass on a right answer.
 //
-// The rows come from one call of the model's outline() per rebuild (the
-// counting wrapper supplies it in the self-test, as main's FolderModel has
-// none); a folder is open when the next row is deeper. While no folder can
-// be open nothing is read at all: every row is then at depth 0, and a
-// folder opening (a change of the expanded role) asks for a read. Where the
-// model has no outline() at all (the gates that run without the counting
-// copy) the rows are read with get() instead.
+// The rows come from one call of the model's outline() per rebuild while a
+// style is on and folders open in place, whether or not one is open
+// (contract revision 9; the counting wrapper supplies outline() in the
+// self-test, as main's FolderModel has none); a folder is open when the next
+// row is deeper. In style off, or where folders do not open in place,
+// nothing is read. Where the model has no outline() at all (the gates that
+// run without the counting copy) the rows are read with get() instead.
 Item {
     id: lines
     objectName: "treeLines"
@@ -51,20 +51,13 @@ Item {
                                     : leftOf(parentDepth) + indent + 17)
     }
 
-    // FolderModel's ExpandedRole (Qt.UserRole + 13).
-    readonly property int expandedRole: 256 + 13
-
     // Each row's depth and whether it is a folder.
     property var rows: []
-    // Whether a folder may be open, so that the rows must be read.
-    property bool open: true
-    // The row of a folder just marked open, until its items are listed.
-    property int pendingRow: -1
 
     function rebuild() {
         const count = model ? model.count : 0
         const out = []
-        if (!open || style === "off" || !model.expandable) {
+        if (style === "off" || !model.expandable) {
             for (let i = 0; i < count; ++i)
                 out.push({ depth: 0, isDir: false })
         } else if (typeof model.outline === "function") {
@@ -79,37 +72,19 @@ Item {
             }
         }
         rows = out
-        // A folder marked open whose items have not come yet keeps the rows
-        // being read: they may arrive in a reset (a re-read) rather than as
-        // rows inserted under it.
-        const deeper = out.some(r => r.depth > 0)
-        if (deeper || pendingRow >= count || !model.isExpanded(pendingRow))
-            pendingRow = -1
-        open = deeper || pendingRow >= 0
     }
+    // Changes in one turn of the event loop give one read.
     function schedule() { Qt.callLater(rebuild) }
 
-    onStyleChanged: { open = true; schedule() }
+    onStyleChanged: schedule()
     Component.onCompleted: schedule()
     Connections {
         target: lines.model
         function onModelReset() { lines.schedule() }
         function onLayoutChanged() { lines.schedule() }
-        // A folder's items may arrive after it was marked open.
-        function onRowsInserted(parent, first) {
-            if (!lines.open && first > 0 && lines.model.isExpanded(first - 1))
-                lines.open = true
-            lines.schedule()
-        }
+        function onRowsInserted() { lines.schedule() }
         function onRowsRemoved() { lines.schedule() }
-        function onDataChanged(topLeft, bottomRight, roles) {
-            if (roles.indexOf(lines.expandedRole) >= 0) {
-                lines.open = true
-                lines.pendingRow = topLeft.row
-                lines.schedule()
-            }
-        }
-        function onExpandableChanged() { lines.open = true; lines.schedule() }
+        function onExpandableChanged() { lines.schedule() }
     }
 
     readonly property var spec: {

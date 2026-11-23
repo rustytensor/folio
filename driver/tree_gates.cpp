@@ -2,7 +2,7 @@
 // main window (Main.qml), offscreen.
 //
 // Usage:
-//   tree-gates <gate> [arg]      a gate from 4 to 16, 20 to 22 or 25 (gate 4
+//   tree-gates <gate> [arg]      a gate from 4 to 16, 20 to 22, 25, 26 or 28 to 30 (gate 4
 //                                takes the PNG to write, gate 15 the stored
 //                                value to try, gate 21 its part: idle, rtl,
 //                                big or insert, run on the counting copy of
@@ -34,7 +34,7 @@
 // route and the dots' paths.
 //
 // With FOLIO_GATES_QML_DIR set, QML is loaded from that folder instead of
-// the compiled-in resources (files missing there still come from the
+// the compiled-in resources (qrc:/FolioUI/, as Folio's QML module names them) (files missing there still come from the
 // resources): gate 4 loads main's QML this way, and the self-tests load
 // deliberately wrong stand-ins.
 
@@ -72,6 +72,7 @@
 #include "dragpicture.h"
 #include "fileops.h"
 #include "foldermodel.h"
+#include "kineticscroll.h"
 #include "places.h"
 #include "plugins.h"
 #include "theme.h"
@@ -173,24 +174,26 @@ private:
     static QString refused() { return QStringLiteral("no disks here"); }
 };
 
-// Loads QML from a folder in place of the resources: qrc:/X becomes the
-// folder's X when it has one, and a file the folder lacks goes back to the
-// resources (so a folder may hold only some of the files).
+// Loads QML from a folder in place of the resources: qrc:/FolioUI/X (where
+// Folio's QML module puts src/X) becomes the folder's X when it has one, and
+// a file the folder lacks goes back to the resources (so a folder may hold
+// only some of the files).
 class QmlFolder : public QQmlAbstractUrlInterceptor {
 public:
     explicit QmlFolder(const QString &folder) : m_folder(QDir(folder).absolutePath()) {}
 
     QUrl intercept(const QUrl &url, DataType) override
     {
-        if (url.scheme() == QLatin1String("qrc")) {
-            const QString relative = url.path().mid(1);
+        static const QString module = QStringLiteral("/FolioUI/");
+        if (url.scheme() == QLatin1String("qrc") && url.path().startsWith(module)) {
+            const QString relative = url.path().mid(module.size());
             const QString local = m_folder + QLatin1Char('/') + relative;
             if (!relative.isEmpty() && QFileInfo(local).isFile())
                 return QUrl::fromLocalFile(local);
         } else if (url.isLocalFile()) {
             const QString local = url.toLocalFile();
             if (local.startsWith(m_folder + QLatin1Char('/')) && !QFileInfo::exists(local))
-                return QUrl(QStringLiteral("qrc:/") + local.mid(m_folder.size() + 1));
+                return QUrl(QStringLiteral("qrc:") + module + local.mid(m_folder.size() + 1));
         }
         return url;
     }
@@ -1550,6 +1553,121 @@ void keysGate(Folio &folio)
     stepTo(false, QStringLiteral("graph"), QStringLiteral("quiet, after typing"));
 }
 
+// The names of every object in the window, item or not, that belongs to the
+// lines menu (linesMenu and its lines-<style> entries), whether shown or not.
+QStringList menuObjects(QQuickWindow *window)
+{
+    QSet<QObject *> all;
+    const auto children = window->findChildren<QObject *>();
+    for (QObject *object : children)
+        all.insert(object);
+    collect(window->contentItem(), [&](QQuickItem *item) { all.insert(item); });
+    QStringList names;
+    for (QObject *object : std::as_const(all)) {
+        const QString name = object->objectName();
+        if (name == QLatin1String("linesMenu") || name.startsWith(QLatin1String("lines-")))
+            names << name;
+    }
+    names.sort();
+    names.removeDuplicates();
+    return names;
+}
+
+// 29 (revision 8): the lines menu is made when it is first opened. Before
+// the first click on linesButton no linesMenu and no lines-<style> entry
+// exists, and L and Shift+L step the style without making it; a click makes
+// and opens it, a second click closes it, and the checked entry then
+// follows the style the keys set.
+void lazyMenuGate(Folio &folio)
+{
+    QQuickWindow *window = openFixtureWindow(folio);
+    Lines lines(window);
+    lines.openFixture();
+    QObject *pane = lines.pane();
+    if (const QStringList early = menuObjects(window); !early.isEmpty())
+        fail(QStringLiteral("before linesButton was clicked the window holds %1, expected no lines menu yet (made on first open)")
+                 .arg(early.join(QStringLiteral(", "))));
+
+    focusPane(window, pane);
+    for (const char *want : {"quiet", "graph"}) {
+        pressL(window, false);
+        if (!QTest::qWaitFor([&] { return lineStyleOf(window) == QLatin1String(want); }, 2000))
+            fail(QStringLiteral("L before the menu was made gave lineStyle %1, expected %2").arg(lineStyleOf(window), QLatin1String(want)));
+    }
+    if (const QStringList made = menuObjects(window); !made.isEmpty())
+        fail(QStringLiteral("L made the lines menu (%1), expected the keys to work without it").arg(made.join(QStringLiteral(", "))));
+
+    step(QStringLiteral("opening the lines menu for the first time"));
+    openLinesMenu(window);
+    for (const QString &entry : {QStringLiteral("off"), QStringLiteral("quiet"), QStringLiteral("graph"), QStringLiteral("trace")}) {
+        const bool checked = visibleOne(window, QStringLiteral("lines-") + entry)->property("checked").toBool();
+        if (checked != (entry == QLatin1String("graph")))
+            fail(QStringLiteral("lines-%1 is %2 when the menu is first opened in graph, expected only lines-graph checked")
+                     .arg(entry, checked ? QStringLiteral("checked") : QStringLiteral("not checked")));
+    }
+    step(QStringLiteral("clicking linesButton again"));
+    QTest::mouseClick(window, Qt::LeftButton, {}, centreOf(visibleOne(window, QStringLiteral("linesButton"))));
+    if (!QTest::qWaitFor([&] { return namedItems(window->contentItem(), QStringLiteral("lines-off"), true).isEmpty(); }, 2000))
+        fail(QStringLiteral("a second click on linesButton left the lines menu open, expected it closed"));
+    settle(300);
+
+    focusPane(window, pane);
+    pressL(window, false);
+    if (!QTest::qWaitFor([&] { return lineStyleOf(window) == QLatin1String("trace"); }, 2000))
+        fail(QStringLiteral("L after the menu was made gave lineStyle %1, expected trace").arg(lineStyleOf(window)));
+    expectChecked(window, pane, QStringLiteral("trace"), QStringLiteral("after L with the menu made and closed"));
+}
+
+// 30 (revision 9): an empty folder left open gets its line when an item
+// arrives in it. On the fixture plus an empty folder (empty/, sorted after
+// docs): empty and docs are opened, docs is closed again, so no child row
+// remains while empty is still open; a file is then written into empty.
+// Its row comes in the re-read the folder's watcher starts (a model reset),
+// and there must then be exactly one guide, from empty to the new item, as
+// the contract places it. In each style, in one window.
+void emptyFolderGate(Folio &folio)
+{
+    writeSettings(folio.home(), {});
+    makeFixture(QStringLiteral("tree"), folio.home());
+    QDir().mkpath(folio.home() + QStringLiteral("/project/empty"));
+    Lines lines(folio.open(QStringLiteral("project")));
+    FolderModel *model = lines.model();
+    const int closedRows = model->rowCount();
+    const QString added = folio.home() + QStringLiteral("/project/empty/new.txt");
+    for (const QString &style : styles) {
+        lines.setStyle(style);
+        settle(300);
+        step(QStringLiteral("opening empty and docs, style %1").arg(style));
+        model->setExpanded(lines.rowOf(QStringLiteral("empty")), true);
+        waitFor([&] { return model->isExpanded(lines.rowOf(QStringLiteral("empty"))); }, QStringLiteral("empty to be marked open"));
+        lines.expand(QStringLiteral("docs"));
+        lines.waitForGuides(1, QStringLiteral("in style %1 with docs and the empty folder open (docs' guide)").arg(style));
+        step(QStringLiteral("closing docs, style %1").arg(style));
+        lines.collapse(QStringLiteral("docs"));
+        waitFor([&] { return model->rowCount() == closedRows; }, QStringLiteral("docs' items to go"));
+        lines.waitForGuides(0, QStringLiteral("in style %1 with only the empty folder open").arg(style));
+        settle(500);
+        if (!model->isExpanded(lines.rowOf(QStringLiteral("empty"))))
+            fail(QStringLiteral("the empty folder closed when docs did (the fixture is not as the gate needs)"));
+
+        step(QStringLiteral("adding a file inside the empty folder, style %1").arg(style));
+        writeFile(added, "added\n");
+        waitFor([&] { return model->indexOfPath(QDir::cleanPath(added)) >= 0 && !model->property("loading").toBool(); },
+                QStringLiteral("the new file in the open empty folder to be listed"));
+        settle(800);
+        lines.waitForGuides(1, QStringLiteral("in style %1 after a file arrived in the open empty folder (expected the guide of empty)").arg(style));
+        expectGeometry(lines, style, QStringLiteral("style %1, a file added to the open empty folder").arg(style));
+
+        step(QStringLiteral("emptying and closing the folder again, style %1").arg(style));
+        QFile::remove(added);
+        waitFor([&] { return model->indexOfPath(QDir::cleanPath(added)) < 0; }, QStringLiteral("the added file to go"));
+        model->setExpanded(lines.rowOf(QStringLiteral("empty")), false);
+        waitFor([&] { return model->rowCount() == closedRows && !model->isExpanded(lines.rowOf(QStringLiteral("empty"))); },
+                QStringLiteral("the empty folder to close"));
+        settle(500);
+    }
+}
+
 // 28 (revision 6): a folder opened just before a re-read gets its lines.
 // With a style on and nothing open, docs is opened and the folder reloaded
 // in the same turn of the event loop: the reload starts a new generation,
@@ -1893,24 +2011,53 @@ QString readsText(CountingModel *model)
 void costGate(Folio &folio, const QString &part)
 {
     if (part == QLatin1String("idle")) {
-        Lines lines(openFixtureWindow(folio, "lineStyle=quiet\n"));
+        // Revision 9: with a style on every rebuild reads the rows with one
+        // outline(), folder open or not; with the style off nothing is read.
+        QQuickWindow *window = openFixtureWindow(folio, "lineStyle=quiet\n");
+        Lines lines(window);
         lines.treeLines();
         CountingModel *model = countingFor(lines);
         settle(500);
-        step(QStringLiteral("resetting the model with no folder open"));
+        int added = 0;
+        const auto addFile = [&] {
+            const int before = model->rowCount();
+            writeFile(folio.home() + QStringLiteral("/project/zz-added%1.txt").arg(++added), "added\n");
+            waitFor([&] { return model->rowCount() == before + 1; }, QStringLiteral("the added file to be listed"));
+            settle(500);
+        };
+        const auto expectReads = [&](int most, const QString &what) {
+            if (model->gets != 0 || model->outlines > most)
+                fail(QStringLiteral("%1 called %2, expected 0 get() and %3 outline()")
+                         .arg(what, readsText(model), most ? QStringLiteral("at most %1").arg(most) : QStringLiteral("0")));
+        };
+        step(QStringLiteral("resetting the model with no folder open, style quiet"));
         zeroReads(model);
         model->simulateReset();
         settle(500);
-        if (model->gets != 0 || model->outlines != 0)
-            fail(QStringLiteral("a model reset with no folder open called %1, expected 0 of either").arg(readsText(model)));
-        step(QStringLiteral("adding a file with no folder open"));
-        const int before = model->rowCount();
+        expectReads(1, QStringLiteral("a model reset with no folder open in style quiet"));
+        step(QStringLiteral("adding a file with no folder open, style quiet"));
         zeroReads(model);
-        writeFile(folio.home() + QStringLiteral("/project/zz-added.txt"), "added\n");
-        waitFor([&] { return model->rowCount() == before + 1; }, QStringLiteral("the added file to be listed"));
+        addFile();
+        expectReads(1, QStringLiteral("a row change (a file added) with no folder open in style quiet"));
+
+        lines.setStyle(QStringLiteral("off"));
         settle(500);
-        if (model->gets != 0 || model->outlines != 0)
-            fail(QStringLiteral("a row change (a file added) with no folder open called %1, expected 0 of either").arg(readsText(model)));
+        step(QStringLiteral("resetting the model in style off"));
+        zeroReads(model);
+        model->simulateReset();
+        settle(500);
+        expectReads(0, QStringLiteral("a model reset in style off"));
+        step(QStringLiteral("adding a file in style off"));
+        zeroReads(model);
+        addFile();
+        expectReads(0, QStringLiteral("a row change (a file added) in style off"));
+        step(QStringLiteral("narrowing the window in style off"));
+        const double width = lines.width();
+        zeroReads(model);
+        window->resize(1100, windowHeight);
+        waitFor([&] { return std::abs(lines.width() - width) > 1; }, QStringLiteral("the list to narrow"));
+        settle(500);
+        expectReads(0, QStringLiteral("a width change in style off"));
     } else if (part == QLatin1String("rtl")) {
         QGuiApplication::setLayoutDirection(Qt::RightToLeft);
         QQuickWindow *window = openFixtureWindow(folio, "lineStyle=quiet\n");
@@ -2345,6 +2492,8 @@ int run(const QString &gate, const QString &arg, const QString &root)
             else if (n == 25) insertTimeGate(*folio);
             else if (n == 26) keysGate(*folio);
             else if (n == 28) reloadGate(*folio);
+            else if (n == 29) lazyMenuGate(*folio);
+            else if (n == 30) emptyFolderGate(*folio);
             else fail(QStringLiteral("no gate %1 here").arg(gate));
         }
     } catch (const GateFailure &failure) {
@@ -2362,7 +2511,7 @@ int run(const QString &gate, const QString &arg, const QString &root)
 int main(int argc, char *argv[])
 {
     if (argc < 2 || argc > 4) {
-        std::fprintf(stderr, "usage: tree-gates <gate 4 to 16, 20 to 22, 25|listshot|shots|measure|verify-shots|verify-overlays|compare> [arg] [arg]\n");
+        std::fprintf(stderr, "usage: tree-gates <gate 4 to 16, 20 to 22, 25, 26, 28 to 30|listshot|shots|measure|verify-shots|verify-overlays|compare> [arg] [arg]\n");
         return 2;
     }
     const QString gate = QString::fromLocal8Bit(argv[1]);
@@ -2398,6 +2547,7 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle(QStringLiteral("Material"));
     qmlRegisterType<FolderModel>("Folio", 1, 0, "FolderModel");
     qmlRegisterType<DragPicture>("Folio", 1, 0, "DragPicture");
+    qmlRegisterType<KineticScroll>("Folio", 1, 0, "KineticScroll");
 
     // Nothing may hang: a run that takes too long fails and ends here.
     QTimer watchdog;

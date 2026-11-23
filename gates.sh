@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck source-path=SCRIPTDIR
 # The gates for the hierarchy lines in Folio's list view, as README.md
-# beside this script lists them (revision 7). Runs all 28, even after a
+# beside this script lists them (revision 9). Runs all 30, even after a
 # failure, and prints one line per gate:
 #
 #   PASS <n> <name>
@@ -17,12 +17,17 @@
 # the overlay row and README in 19) and the lines at display scales 1.5 and
 # 2 (27), and a folder opened just before a re-read (28). Revision 7 reads
 # the drawing's own state (TreeLines' built object) instead of properties
-# kept for the gates, and gate 3 checks none are left. The driver draws
-# with Qt's software scene graph backend.
+# kept for the gates, and gate 3 checks none are left. Revision 8 ports
+# the gates to main bd8ea0c (QML in the FolioUI module, picked up by a glob,
+# so src/resources.qrc is no longer touched) and adds the lines menu made on
+# first open (29). Revision 9 drops TreeLines' "a folder may be open"
+# shortcut: with a style on every rebuild reads one outline() (21), gate 3
+# checks the shortcut is gone, and gate 30 is an empty folder left open that
+# gets an item. The driver draws with Qt's software scene graph backend.
 #
 # Exits 0 only when every gate passes. Takes no arguments; the checkout is
 # $FOLIO_REPO, by default the current folder. Logs go to logs/ beside this
-# script. Gates 4 to 17 and 20 to 28 run the tree-gates driver (driver/), built into the
+# script. Gates 4 to 17 and 20 to 30 run the tree-gates driver (driver/), built into the
 # checkout's build/gates folder; main is read with `git archive`, so the
 # checkout's working tree is never changed.
 set -euo pipefail
@@ -37,8 +42,10 @@ failures=0
 # The em dash, written as its UTF-8 bytes so this file holds none.
 em_dash=$'\xe2\x80\x94'
 # Files the change may touch (gate 2); revision 5 adds FolderModel's
-# outline() and its test.
-allowed='^(src/[^/]+\.qml|src/resources\.qrc|src/i18n/en\.json|README\.md|src/foldermodel\.(h|cpp)|tests/folio_tests\.cpp)$'
+# outline() and its test. Revision 8: src/resources.qrc is no longer among
+# them, since main's CMakeLists.txt takes every src/*.qml into the FolioUI
+# module by a glob.
+allowed='^(src/[^/]+\.qml|src/i18n/en\.json|README\.md|src/foldermodel\.(h|cpp)|tests/folio_tests\.cpp)$'
 # Untracked files that belong to local tools, not to the change.
 tool_files='^\.[^/]+$'
 
@@ -101,9 +108,10 @@ gate_build() {
     pass 1 "$name"
 }
 
-# 2: only QML files in src/, resources.qrc, en.json, README.md, FolderModel
-# and the test file change, the only QML file added is src/TreeLines.qml,
-# and the test file only gains one test function for outline().
+# 2: only QML files in src/, en.json, README.md, FolderModel and the test
+# file change, the only QML files added are src/TreeLines.qml and, if the
+# builder wants it, src/LinesMenu.qml, and the test file only gains one
+# test function for outline().
 gate_scope() {
     local name="scope" changed outside added extra tests problems=()
     changed=$(changed_files)
@@ -114,7 +122,7 @@ gate_scope() {
         git -C "$repo" ls-files --others --exclude-standard | grep -vE "$tool_files" || true
     )
     extra=$(extra_qml_files "$added")
-    [[ -z $extra ]] || problems+=("QML files added besides src/TreeLines.qml: $extra")
+    [[ -z $extra ]] || problems+=("QML files added besides src/TreeLines.qml and src/LinesMenu.qml: $extra")
     tests=$(git -C "$repo" diff main -U0 -- tests/folio_tests.cpp | test_file_check)
     [[ -z $tests ]] || problems+=("$(paste -sd ';' - <<<"$tests" | sed 's/;/; /g')")
     if ((${#problems[@]} > 0)); then
@@ -184,7 +192,7 @@ report_driver() {
     fi
 }
 
-# 5 to 14, 16, 20, 22, 26 and 28: one run of the driver each.
+# 5 to 14, 16, 20, 22, 26 and 28 to 30: one run of the driver each.
 gate_driver() {
     local n=$1 name=$2 why=$3 out status=0
     if [[ -n $why ]]; then
@@ -457,6 +465,8 @@ main() {
     gate_driver 26 "L and Shift+L step the style" "$why"
     gate_scaled "$why"
     gate_driver 28 "a folder opened just before a re-read" "$why"
+    gate_driver 29 "the lines menu is made on first open" "$why"
+    gate_driver 30 "an empty folder left open gets its line" "$why"
 
     ((failures == 0))
 }

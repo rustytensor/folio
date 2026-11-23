@@ -1,6 +1,6 @@
 # Gates for the hierarchy lines in Folio's list view
 
-These are the checks for the pull request that draws hierarchy lines in the list's tree, kept out of the pull request so it stays small. There are 28 gates. Each has an expected result that was fixed before the code was written, so each one passes or fails and nothing is left to judgement.
+These are the checks for the pull request that draws hierarchy lines in the list's tree, kept out of the pull request so it stays small. There are 30 gates. Each has an expected result that was fixed before the code was written, so each one passes or fails and nothing is left to judgement.
 
 The comments in the scripts call this file "the contract". Where they say "revision", they mean one of the rounds the contract went through while the code was written.
 
@@ -13,11 +13,11 @@ git clone -b tree-lines-gates https://github.com/rustytensor/folio ../folio-tree
 ../folio-tree-gates/gates.sh
 ```
 
-It prints one line per gate, `PASS <n> <name>` or `FAIL <n> <name>: <what was seen, against what was expected>`, and exits 0 only when all 28 pass. A run takes a few minutes, because gate 1 rebuilds Folio from clean in the checkout's `build/` folder and gate 18 runs the whole test suite. Logs go to `logs/` beside the script. `FOLIO_REPO` names another checkout than the current folder.
+It prints one line per gate, `PASS <n> <name>` or `FAIL <n> <name>: <what was seen, against what was expected>`, and exits 0 only when all 30 pass. A run takes a few minutes, because gate 1 rebuilds Folio from clean in the checkout's `build/` folder and gate 18 runs the whole test suite. Logs go to `logs/` beside the script. `FOLIO_REPO` names another checkout than the current folder.
 
-Most gates run `tree-gates`, a small program in `driver/`. It is compiled from Folio's own sources and QML into `build/gates` in the checkout. It opens the real `Main.qml` window offscreen, with a private home folder, and reads where the lines are. Offscreen there is no GPU, so the window is drawn with Qt's software renderer.
+Most gates run `tree-gates`, a small program in `driver/`. It is compiled from Folio's own sources and QML into `build/gates` in the checkout. The QML is loaded as it is written, not precompiled. It opens the real `Main.qml` window offscreen, with a private home folder, and reads where the lines are. Offscreen there is no GPU, so the window is drawn with Qt's software renderer.
 
-Gate 18 compares `bin/test` with `baseline.txt`, which I recorded on `main` at `eba4276` on Arch. If the suite gives other numbers on your machine, run `record-baseline.sh` in a checkout of `main` first.
+Gate 18 compares `bin/test` with `baseline.txt`, which I recorded on `main` at `bd8ea0c` on Omarchy. If the suite gives other numbers on your machine, run `record-baseline.sh` first. It exports `main` into `build/gates`, tests it there and leaves the checkout alone.
 
 Gate 25 measures time, so on a busy machine it can fail by a few milliseconds. Run it again before believing it.
 
@@ -28,10 +28,10 @@ Gate 25 measures time, so on a busy machine it can fail by a few milliseconds. R
 The list view opens folders in place as a tree. With a line style chosen, a guide runs down from each open folder and turns into each of its items with a quarter circle.
 
 - The setting is `lineStyle` on the window in `src/Main.qml`, kept in its one `Settings` block. Its values are `off`, `quiet`, `graph` and `trace`, and the default is `off`. Any other stored value draws no lines and is left as it is.
-- A button in the top bar, shown only in the list view, opens a menu with the four choices. The one in effect is checked.
+- A button in the top bar, shown only in the list view, opens a menu with the four choices. The one in effect is checked. The menu is made the first time it is opened.
 - In the list view, `L` steps to the next style and `Shift+L` to the one before, the way `S` and `Shift+S` step the sort order.
 - Both panes of a split follow the one setting.
-- With `off`, the list is drawn exactly as on `main`.
+- With `off`, the list is drawn exactly as on `main` and its rows are never read. With a style on, the rows are read in one `outline()` call each time rows are added, removed or replaced.
 - Lines are drawn only where folders open in place: not in a search, Recents or the trash.
 
 ### What the gates read from Folio
@@ -95,8 +95,8 @@ README.md
 | # | Group | Gate |
 | --- | --- | --- |
 | 1 | Standards | `bin/build` exits 0 with no compiler or QML warnings in its output |
-| 2 | Standards | The change touches only `src/*.qml`, `src/resources.qrc`, `src/i18n/en.json`, `README.md`, `src/foldermodel.h`, `src/foldermodel.cpp` and `tests/folio_tests.cpp`. The only QML file added is `src/TreeLines.qml`. The test file only gains one whole test function with "outline" in its name |
-| 3 | Standards | `qmllint` reports nothing on the changed QML files that it doesn't report on `main`. The added text has no `pragma ComponentBehavior`. `src/TreeLines.qml` keeps no state only for the gates |
+| 2 | Standards | The change touches only `src/*.qml`, `src/i18n/en.json`, `README.md`, `src/foldermodel.h`, `src/foldermodel.cpp` and `tests/folio_tests.cpp`. The only QML file added is `src/TreeLines.qml` (a `src/LinesMenu.qml` would be allowed too). The test file only gains one whole test function with "outline" in its name |
+| 3 | Standards | `qmllint` reports nothing on the changed QML files that it doesn't report on `main`. The added text has no `pragma ComponentBehavior`. `src/TreeLines.qml` keeps no state only for the gates, and no flag for whether a folder may be open |
 | 4 | Normal | With `off` (the default) there are no guides and no dots, and a screenshot of the list is pixel-identical to one taken with `main`'s QML |
 | 5 | Normal | In each style the tree above gives 5 guides and 14 curves, and every position is within 0.5 px of the sizes above |
 | 6 | Normal | Each style's width, colors and opacity are the table's, in a dark and a light theme |
@@ -114,7 +114,7 @@ README.md
 | 18 | Project | `bin/test` passes one test more than the baseline, with the same failed and skipped counts and the same failing tests. One passing test has "outline" in its name, and `englishCatalogMatchesTheSources` passes |
 | 19 | Docs | `README.md` mentions the hierarchy lines and `Shift+L`. `HelpOverlay.qml` has a row with the keys `L` and `Shift+L`. Every new `qsTr` text is in `en.json` |
 | 20 | Limits | At zoom 0.75, 1, 1.25, 1.5 and 2, measured against the real arrow and picture items of the rows: a guide starts 4 to 8 px under the open folder's arrow, a folder's line ends 2 to 6 px short of its arrow, a file's line ends 3 to 8 px short of its picture, and in graph a folder's dot is at least 1 px clear of the arrow |
-| 21 | Limits | With no folder open, a reset, a row change and a width change right to left call neither `get()` nor `outline()` on the model. With 10,000 rows and nothing open a rebuild takes under 50 ms. With 10,000 rows and one folder of 50 items open, one inserted row calls `get()` 0 times and `outline()` at most once, and the guides are right afterwards |
+| 21 | Limits | With a style on and no folder open, a reset and a row change each call `get()` 0 times and `outline()` at most once. With `off`, a reset, a row change and a width change call neither. A width change right to left reads no rows. With 10,000 rows and nothing open a rebuild takes under 50 ms. With 10,000 rows and one folder of 50 items open, one inserted row calls `get()` 0 times and `outline()` at most once, and the guides are right afterwards |
 | 22 | Limits | Dots are paths, not items: opening a folder with 200 folders in it gives at least 200 dots in graph, and the number of items under `treeLines` is the same as with a folder of 2 files open |
 | 23 | Screenshots | Over the selected row, a line's pixel is that row's tint blended with the line's color at the style's opacity, within 10 per channel. The pixel where a curve joins its guide equals the plain guide's within 4 per channel |
 | 24 | Standards | `src/Main.qml` has exactly one `Settings` block, and `lineStyle` is its last entry |
@@ -122,5 +122,7 @@ README.md
 | 26 | Normal | In the list, `L` from off gives quiet, graph, trace, off, and `Shift+L` goes the other way, with the matching menu entry checked. From an unknown stored style, `L` gives quiet and `Shift+L` gives trace. In grid and columns the keys change nothing. `Ctrl+L` still opens the path field, and in the path field and the search field the keys type letters |
 | 27 | Screenshots | With the window drawn at display scales 1.5 and 2, gate 17's check holds in every style, and at scale 2 gate 23's two checks hold as well |
 | 28 | Limits | With nothing open, `docs` is opened and the folder re-read at once, before the opening's own listing arrives. Once the rows have settled there is exactly one guide, with the right positions, in each style |
+| 29 | Normal | Before the button is first clicked the window holds no lines menu and no menu entries, and `L` steps the style without making one. A click makes and opens the menu with the right entry checked, a second click closes it, and the checked entry follows the keys |
+| 30 | Limits | With an empty folder left open and no other folder open, a file arriving in the empty folder gets its guide, in each style |
 
 Gate 14 is weak, and I know it: Folio's model never holds an open folder where folders don't open in place, so the gate can't set up a state in which code that ignored this would draw.

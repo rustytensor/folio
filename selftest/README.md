@@ -1,4 +1,4 @@
-# Self-test of the gates (contract revision 7)
+# Self-test of the gates (contract revision 9)
 
 `run.sh` shows that the gates tell a right answer from a wrong one without
 depending on the code under test. It exports main's `src/` with `git archive`
@@ -55,6 +55,20 @@ fails 5 and 22 as before; main's QML fails cleanly. Gate 3's no-gate-only-state 
 made-up files passes a clean one (with a `dots` property inside a `component`, and a
 commented-out declaration, both allowed) and fails each of a root `guides`, `route` or
 `dots`, and a `dots` or `routeDots` in `built`.
+
+Revision 8 cases (`selftest/run.sh 2 4 5 26 29`, in `../logs/selftest-rev8.txt`), on
+main `bd8ea0c`, whose QML the driver now loads from a folder in place of
+`qrc:/FolioUI/`: good passes 4, 5, 26 and 29 (its planted lines menu is made on the
+button's first click, in a `Loader`); bad fails all four; main's QML fails them
+cleanly. Gate 2 now passes a second added QML file only if it is `src/LinesMenu.qml`.
+The planting points (after the view button in `PathBar.qml`, after Shift+S in
+`FolderPane.qml`) are unchanged on the new main.
+
+Revision 9 cases (`selftest/run.sh 3 21 28 30`, in `../logs/selftest-rev9.txt`): the
+good stand-in dropped its open flag and `pendingRow` and reads one `outline()` per
+rebuild whenever a style is on; it passes 21, 28 and 30. Bad fails all three; main's QML
+fails them cleanly. Gate 3's check now also fails a `built` that declares `open` and a
+file that uses `built.open`.
 
 What this proves:
 
