@@ -13,9 +13,9 @@ git clone -b pane-lines-gates https://github.com/rustytensor/folio ../folio-gate
 
 It prints one line per gate, `PASS <n> <name>` or `FAIL <n> <name>: <what was seen, against what was expected>`, and exits 0 only when all 15 pass. A run takes a few minutes, because gate 1 rebuilds Folio from clean and gate 13 runs the whole test suite. Logs go to `logs/` beside the script.
 
-Gates 3 to 12 and 15 run `pane-gates`, a small program in `driver/`. It is compiled from Folio's own sources and QML into `build/gates` in the checkout. It opens the real `Main.qml` window offscreen, with a private home folder, and drags the lines with synthetic mouse events. `PANE_GATES_TRACE=1 build/gates/pane-gates <n>` runs one gate and logs each drag.
+Gates 3 to 12 and 15 run `pane-gates`, a small program in `driver/`. It is compiled from Folio's own sources and QML into `build/gates` in the checkout. The QML is loaded as it is written, not precompiled. It opens the real `Main.qml` window offscreen, with a private home folder, and drags the lines with synthetic mouse events. `PANE_GATES_TRACE=1 build/gates/pane-gates <n>` runs one gate and logs each drag.
 
-Gate 13 compares `bin/test` with `baseline.txt`, which I recorded on `main` at `eba4276` on Arch. If the suite gives other numbers on your machine, run `record-baseline.sh` in a checkout of `main` first.
+Gate 13 compares `bin/test` with `baseline.txt`, which I recorded on `main` at `bd8ea0c` on Omarchy. If the suite gives other numbers on your machine, run `record-baseline.sh` first. It exports `main` into `build/gates`, tests it there and leaves the checkout alone.
 
 ## What is being checked
 

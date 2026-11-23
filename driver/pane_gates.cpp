@@ -43,6 +43,7 @@
 #include "disks.h"
 #include "dragpicture.h"
 #include "foldermodel.h"
+#include "kineticscroll.h"
 #include "places.h"
 #include "plugins.h"
 #include "theme.h"
@@ -974,6 +975,7 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle(QStringLiteral("Material"));
     qmlRegisterType<FolderModel>("Folio", 1, 0, "FolderModel");
     qmlRegisterType<DragPicture>("Folio", 1, 0, "DragPicture");
+    qmlRegisterType<KineticScroll>("Folio", 1, 0, "KineticScroll");
 
     // Nothing may hang: a gate that runs too long fails and ends here.
     QTimer watchdog;
