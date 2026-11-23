@@ -1,7 +1,7 @@
 // pane-gates: checks the draggable lines between Folio's panes in the real
 // main window (Main.qml), offscreen, with synthetic mouse events.
 //
-// Usage: pane-gates <gate>, with a gate number from 3 to 12. Each run is one
+// Usage: pane-gates <gate>, with a gate number from 3 to 12, or 15. Each run is one
 // gate in a process of its own, with a private HOME and XDG folders made for
 // it, so settings written by one gate never reach another and nothing of the
 // user's own configuration, cache or data is read or written.
@@ -55,6 +55,10 @@ namespace {
 // The window size every gate runs at: Main.qml's own default.
 constexpr int windowWidth = 1280;
 constexpr int windowHeight = 800;
+// Main.qml's least width, for the narrow split.
+constexpr int narrowWidth = 720;
+// The least width either pane of a split keeps.
+constexpr double splitLeast = 240;
 // How long any one wait may take before the gate fails, and how long a whole
 // gate may run before the watchdog ends it.
 constexpr int waitLimitMs = 10000;
@@ -506,6 +510,15 @@ public:
         std::fprintf(stderr, "trace: %s; %s\n", qPrintable(what), qPrintable(seen.join(QStringLiteral(", "))));
     }
 
+    // Resizes the window to `width` (at the usual height) and waits for the
+    // panes to be laid out again.
+    void resize(int width)
+    {
+        m_window->resize(width, windowHeight);
+        waitFor([&] { return m_window->width() == width; }, QStringLiteral("the window to be %1 px wide").arg(width));
+        settle(400);
+    }
+
     void doubleClick(QPoint at)
     {
         QTest::mouseMove(m_window, at);
@@ -752,14 +765,41 @@ void limitsGate(Folio &folio)
     step(QStringLiteral("dragging the split line far in and out"));
     window.drag(Window::grip(window.divider(QStringLiteral("splitDivider"))), -500);
     Window::Split split = window.split();
-    expectEqual(split.left, 0.25 * split.room, QStringLiteral("the left pane dragged 500 px narrower (25 % of %1)")
-                                                   .arg(px(split.room)),
-                1);
+    expectEqual(split.left, splitLeast,
+                QStringLiteral("the left pane dragged 500 px narrower (room %1)").arg(px(split.room)));
     window.drag(Window::grip(window.divider(QStringLiteral("splitDivider"))), 600);
     split = window.split();
-    expectEqual(split.left, 0.75 * split.room, QStringLiteral("the left pane dragged 600 px wider (75 % of %1)")
-                                                   .arg(px(split.room)),
-                1);
+    expectEqual(split.left, split.room - splitLeast,
+                QStringLiteral("the left pane dragged 600 px wider (room %1 less %2)").arg(px(split.room), px(splitLeast)));
+}
+
+// 15: in a window too narrow for two 240 px panes, the split stays even
+// whatever is dragged; widened again, the left pane is within its limits.
+void narrowSplitGate(Folio &folio)
+{
+    Window window(folio.open(QStringLiteral("d1")));
+    window.resize(narrowWidth);
+    step(QStringLiteral("dragging the sidebar line to 400 in a %1 px window").arg(narrowWidth));
+    window.drag(Window::grip(window.divider(QStringLiteral("sidebarDivider"))), 400 - qRound(window.sidebar()));
+    expectEqual(window.sidebar(), 400, QStringLiteral("the sidebar dragged to 400 in a %1 px window").arg(narrowWidth));
+    window.openSplit();
+    expectEqual(window.split().room, narrowWidth - 400 - 2, QStringLiteral("the split's room"));
+
+    step(QStringLiteral("dragging the narrow split line by +100"));
+    window.drag(Window::grip(window.divider(QStringLiteral("splitDivider"))), 100);
+    expectEvenSplit(window, QStringLiteral("after dragging the split line +100 in a room of 318 px"));
+    step(QStringLiteral("dragging the narrow split line by -100"));
+    window.drag(Window::grip(window.divider(QStringLiteral("splitDivider"))), -100);
+    expectEvenSplit(window, QStringLiteral("after dragging the split line -100 in a room of 318 px"));
+
+    step(QStringLiteral("widening the window to %1 px").arg(windowWidth));
+    window.resize(windowWidth);
+    const Window::Split split = window.split();
+    if (split.left < splitLeast - exact || split.left > split.room - splitLeast + exact)
+        fail(QStringLiteral("the left pane is %1 px after widening to %2 px (room %3), expected %4 to %5")
+                 .arg(px(split.left))
+                 .arg(windowWidth)
+                 .arg(px(split.room), px(splitLeast), px(split.room - splitLeast)));
 }
 
 // 10: a press that moves less than the drag distance is not a drag.
@@ -883,7 +923,8 @@ int run(int gate, const QString &root)
         case 10: nudgeGate(*folio); break;
         case 11: badSettingsGate(*folio, root + QStringLiteral("/home/.config")); break;
         case 12: scrollBarGate(*folio); break;
-        default: fail(QStringLiteral("no gate %1 here (3 to 12)").arg(gate));
+        case 15: narrowSplitGate(*folio); break;
+        default: fail(QStringLiteral("no gate %1 here (3 to 12, 15)").arg(gate));
         }
     } catch (const GateFailure &failure) {
         std::printf("FAIL: %s\n", failure.what());
@@ -902,7 +943,7 @@ int main(int argc, char *argv[])
     bool ok = false;
     const int gate = argc == 2 ? QByteArray(argv[1]).toInt(&ok) : 0;
     if (!ok) {
-        std::fprintf(stderr, "usage: pane-gates <gate 3-12>\n");
+        std::fprintf(stderr, "usage: pane-gates <gate: 3 to 12, or 15>\n");
         return 2;
     }
 

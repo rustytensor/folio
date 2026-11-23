@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The gates for Folio's draggable pane lines, as README.md beside this
-# script lists them. Runs all 14, even after a failure, and prints one line
+# script lists them. Runs all 15, even after a failure, and prints one line
 # per gate:
 #
 #   PASS <n> <name>
@@ -8,8 +8,8 @@
 #
 # Exits 0 only when every gate passes. Takes no arguments; the checkout is
 # $FOLIO_REPO, by default the folder it is run from. Logs go to logs/ beside this
-# script. Gates 3 to 12 run the pane-gates driver (driver/), built into the
-# checkout's build/gates folder.
+# script. Gates 3 to 12 and 15 run the pane-gates driver (driver/), built
+# into the checkout's build/gates folder.
 set -euo pipefail
 
 gates_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -79,7 +79,7 @@ gate_scope() {
     pass 2 "$name"
 }
 
-# Builds the driver for gates 3 to 12 (release, no debug information).
+# Builds the driver for gates 3 to 12 and 15 (release, no debug information).
 # Prints why it could not, and returns 1, when it fails.
 build_driver() {
     local log="$log_dir/driver-build.log"
@@ -110,7 +110,7 @@ build_driver() {
     fi
 }
 
-# 3 to 12: one run of the driver each, in a process of its own.
+# 3 to 12 and 15: one run of the driver each, in a process of its own.
 gate_driver() {
     local n=$1 name=$2 why=$3 out status=0 last
     if [[ -n $why ]]; then
@@ -204,6 +204,7 @@ main() {
 
     gate_tests
     gate_docs
+    gate_driver 15 "split in a narrow window" "$why"
 
     ((failures == 0))
 }

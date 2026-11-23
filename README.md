@@ -1,6 +1,6 @@
 # Gates for Folio's draggable pane lines
 
-These are the checks for [omacom/folio#114](https://github.com/omacom/folio/pull/114), kept out of the pull request so it stays small. There are 14 gates. Each has an expected result that was fixed before the code was written, so each one passes or fails and nothing is left to judgement.
+These are the checks for [omacom/folio#114](https://github.com/omacom/folio/pull/114), kept out of the pull request so it stays small. There are 15 gates. Each has an expected result that was fixed before the code was written, so each one passes or fails and nothing is left to judgement.
 
 ## Running them
 
@@ -11,9 +11,9 @@ git clone -b pane-lines-gates https://github.com/rustytensor/folio ../folio-gate
 ../folio-gates/gates.sh
 ```
 
-It prints one line per gate, `PASS <n> <name>` or `FAIL <n> <name>: <what was seen, against what was expected>`, and exits 0 only when all 14 pass. A run takes a few minutes, because gate 1 rebuilds Folio from clean and gate 13 runs the whole test suite. Logs go to `logs/` beside the script.
+It prints one line per gate, `PASS <n> <name>` or `FAIL <n> <name>: <what was seen, against what was expected>`, and exits 0 only when all 15 pass. A run takes a few minutes, because gate 1 rebuilds Folio from clean and gate 13 runs the whole test suite. Logs go to `logs/` beside the script.
 
-Gates 3 to 12 run `pane-gates`, a small program in `driver/`. It is compiled from Folio's own sources and QML into `build/gates` in the checkout. It opens the real `Main.qml` window offscreen, with a private home folder, and drags the lines with synthetic mouse events. `PANE_GATES_TRACE=1 build/gates/pane-gates <n>` runs one gate and logs each drag.
+Gates 3 to 12 and 15 run `pane-gates`, a small program in `driver/`. It is compiled from Folio's own sources and QML into `build/gates` in the checkout. It opens the real `Main.qml` window offscreen, with a private home folder, and drags the lines with synthetic mouse events. `PANE_GATES_TRACE=1 build/gates/pane-gates <n>` runs one gate and logs each drag.
 
 Gate 13 compares `bin/test` with `baseline.txt`, which I recorded on `main` at `eba4276` on Arch. If the suite gives other numbers on your machine, run `record-baseline.sh` in a checkout of `main` first.
 
@@ -49,9 +49,10 @@ The grips are named `sidebarDivider`, `splitDivider` and `columnDivider`. The dr
 | --- | --- | --- | --- |
 | Sidebar | 190 px | 140 px | 400 px |
 | Column | 260 px | 180 px | 480 px |
-| Split, left pane | half of the room | 25 % of the room | 75 % of the room |
+| Split, left pane | half of the room | 240 px | the room less 240 px |
 
 - The room of a split is the row's width, less the sidebar and the two 1 px lines. The left pane is `round(share * room)` wide and the right pane has the rest.
+- Each pane of a split keeps at least 240 px. When the room is under 480 px there is no such width, and the split is even whatever `splitShare` holds.
 - The limits are applied where a stored value is read, so a setting edited by hand shows at the nearest limit.
 - A grip is 7 px wide: the line and the first 6 px of the pane after it. It doesn't reach over the pane before the line, where that pane's scroll bar is.
 - The split's grip starts below the 60 px top bar.
@@ -75,11 +76,12 @@ The grips are named `sidebarDivider`, `splitDivider` and `columnDivider`. The dr
 | 6 | Normal | A second window opened after a drag has the dragged widths |
 | 7 | Normal | In a folder at least 5 columns deep, scrolled back so an earlier column is first in view: dragging a column's line by +30 leaves the scroll offset at (columns scrolled past on press) × (new width + 1) within 1 px, doesn't jump to the end, and the line ends within 2 px of the pointer |
 | 8 | Normal | Right to left: dragging each line away from its pane grows it by the travel (sidebar and split within 1 px, first column exactly) |
-| 9 | Limits | Dragging far out stops at 140 and 400 (sidebar), 180 and 480 (columns), 25 % and 75 % of the room within 1 px (split) |
+| 9 | Limits | Dragging far out stops at 140 and 400 (sidebar), 180 and 480 (columns); the split stops with the left pane at 240 px and at the room less 240 px, exactly |
 | 10 | Limits | A press that moves less than the drag distance and lets go changes no width and leaves all three values 0 |
 | 11 | Bad input | A settings file with `sidebarWidth=99999`, `columnWidth=-5`, `splitShare=abc` opens with sidebar 400, columns 260 and an even split |
 | 12 | Bad input | In a column long enough to scroll, pressing on that column's own scroll bar and dragging down scrolls the list and changes no width |
 | 13 | Project | `bin/test` has the same passed, failed and skipped counts and the same failing tests as the baseline, and `englishCatalogMatchesTheSources` passes |
 | 14 | Project | `README.md` and `HelpOverlay.qml` mention dragging and double-clicking a line; nothing mentions `Shift+W` or a details divider |
+| 15 | Limits | Window 720 px wide with the sidebar dragged to 400 (room 318 px): after the split line is dragged +100 and after it is dragged -100, the two panes are equal within 1 px; widened to 1280 px, the left pane is within its 240 px limits again |
 
 No gate checks how wide a grip is. The gates press on the line's own pixel, so how easy a line is to grab is something to try by hand.
