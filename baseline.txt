@@ -1,0 +1,6 @@
+# Result of bin/test on main at eba4276722f20c33b12ddce4f58c673f7011b645 (exit status 0), recorded 2026-11-23T03:06Z.
+passed=278
+failed=0
+skipped=1
+failing=
+english=PASS
